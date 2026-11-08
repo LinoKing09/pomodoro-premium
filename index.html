@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en" data-theme="midnight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomodoro</title>
+  <meta name="description" content="A calm, full-screen Pomodoro timer with Spotify playlists for focus and breaks.">
+  <meta name="theme-color" content="#0a1730">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-phase="focus">
+  <header class="top chrome">
+    <nav class="modes" id="modes" aria-label="Timer mode"></nav>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeBtn" title="Switch theme (T)" aria-label="Switch theme">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.4A5.5 5.5 0 0 1 13.4 3.1 9 9 0 0 0 12 3z"/></svg>
+      </button>
+      <button class="icon-btn" id="fullscreenBtn" title="Fullscreen (F)" aria-label="Fullscreen">
+        <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="phase-label" id="phaseLabel">Focus</div>
+    <div class="timer" id="timer" aria-live="off">25:00</div>
+    <div class="progress" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+    <input class="intent" id="intent" type="text" maxlength="80" placeholder="What are you working on?" aria-label="Current task">
+    <div class="controls chrome">
+      <button class="icon-btn lg" id="resetBtn" title="Reset (R)" aria-label="Reset">
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg>
+      </button>
+      <button class="primary" id="startBtn">Start</button>
+      <button class="icon-btn lg" id="skipBtn" title="Skip to next phase (S)" aria-label="Skip">
+        <svg viewBox="0 0 24 24"><path d="M6 5l9 7-9 7zM18 5v14"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <footer class="bottom chrome">
+    <div class="stats" id="stats"></div>
+    <div class="now-playing" id="nowPlaying"></div>
+  </footer>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Settings">
+    <div class="drawer-head">
+      <h2>Settings</h2>
+      <button class="icon-btn" id="closeDrawer" aria-label="Close settings">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <section>
+      <h3>Appearance</h3>
+      <div class="seg" id="themeSeg">
+        <button data-value="midnight">Midnight</button>
+        <button data-value="pomodoro">Pomodoro</button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Timer</h3>
+      <label class="row"><span>Auto-start breaks</span><input type="checkbox" id="optAutoBreak"></label>
+      <label class="row"><span>Auto-start focus sessions</span><input type="checkbox" id="optAutoFocus"></label>
+      <label class="row"><span>Chime when a phase ends</span><input type="checkbox" id="optSound"></label>
+      <label class="row"><span>Desktop notifications</span><input type="checkbox" id="optNotify"></label>
+      <label class="row"><span>Keep screen awake</span><input type="checkbox" id="optWake"></label>
+      <label class="row"><span>Hide controls while running</span><input type="checkbox" id="optAutoHide"></label>
+    </section>
+
+    <section>
+      <h3>Spotify</h3>
+
+      <div id="spSetup" hidden>
+        <p class="hint">Plays your playlists on any Spotify device (e.g. your phone connected to a speaker). Requires Spotify Premium.</p>
+        <ol class="steps">
+          <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and create an app (select <em>Web API</em>).</li>
+          <li>Add this Redirect URI:
+            <div class="copy"><code id="redirectUri"></code><button class="link" id="copyRedirect">Copy</button></div>
+          </li>
+          <li>Paste the app's Client ID below.</li>
+        </ol>
+        <div class="inline">
+          <input type="text" id="clientIdInput" placeholder="Client ID" spellcheck="false" autocomplete="off">
+          <button class="btn" id="saveClientId">Save</button>
+        </div>
+      </div>
+
+      <div id="spConnect" hidden>
+        <button class="btn wide" id="connectBtn">Connect Spotify</button>
+        <button class="link small" id="changeClientId">Change Client ID</button>
+      </div>
+
+      <div id="spConnected" hidden>
+        <div class="row"><span>Connected as <strong id="spUser">…</strong></span><button class="link" id="disconnectBtn">Disconnect</button></div>
+        <label class="row"><span>Control Spotify with the timer</span><input type="checkbox" id="optMusic"></label>
+        <label class="row"><span>Pause music when timer pauses</span><input type="checkbox" id="optPauseMusic"></label>
+
+        <label class="field">
+          <span>Playback device</span>
+          <div class="inline">
+            <select id="deviceSelect"></select>
+            <button class="icon-btn" id="refreshDevices" title="Refresh devices" aria-label="Refresh devices">
+              <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>
+            </button>
+          </div>
+          <small class="hint">Your phone only shows up while the Spotify app is open on it.</small>
+        </label>
+
+        <div class="field">
+          <span>Focus playlist</span>
+          <select id="focusPlaylist" data-phase="focus"></select>
+          <div class="seg small" data-order="focus">
+            <button data-value="shuffle">Shuffle</button>
+            <button data-value="continuous">Continue where I left off</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span>Break playlist</span>
+          <select id="breakPlaylist" data-phase="break"></select>
+          <div class="seg small" data-order="break">
+            <button data-value="shuffle">Shuffle</button>
+            <button data-value="continuous">Continue where I left off</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="testFocus">Test focus music</button>
+          <button class="btn" id="testBreak">Test break music</button>
+        </div>
+        <button class="link small" id="resetPositions">Forget saved playlist positions</button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Shortcuts</h3>
+      <ul class="keys">
+        <li><kbd>Space</kbd> Start / pause</li>
+        <li><kbd>R</kbd> Reset</li>
+        <li><kbd>S</kbd> Skip phase</li>
+        <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Switch mode</li>
+        <li><kbd>T</kbd> Switch theme</li>
+        <li><kbd>F</kbd> Fullscreen</li>
+      </ul>
+    </section>
+  </aside>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="spotify.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

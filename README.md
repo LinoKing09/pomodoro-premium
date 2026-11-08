@@ -6,13 +6,14 @@ A calm, full-screen Pomodoro timer meant to run on a second monitor while you st
 
 ## Features
 
-- Three modes (focus/break): **Classic** 25/5, **Deep Work** 50/10, **Flow State** 90/20
+- Modes (focus/break/long break): **Classic** 25/5/15, **Deep Work** 50/10/30, **Flow State** 90/20/40, plus a **Custom** mode with your own times
+- Long break after every N sessions (default 4), shown as dots under the phase label
 - Two themes: **Midnight** (dark blue, default) and **Pomodoro** (red); the colors shift subtly during breaks
-- Spotify: one playlist for focus, one for breaks, each with **Shuffle** or **Continue where I left off**. Playback runs on any device of your account (e.g. your phone on a Bluetooth speaker)
+- Spotify: one playlist for focus, one for breaks, each with **Shuffle** or **Continue where I left off**. Any playlist or album works: search, paste a share link, or use what is currently playing. Music fades out/in between phases (on devices that allow volume control). Playback runs on any device of your account (e.g. your phone on a Bluetooth speaker)
 - Chime + optional desktop notification when a phase ends, auto-start options
 - Controls fade out while the timer runs, screen wake lock, fullscreen
 - “What are you working on?” line and a daily session counter
-- Keyboard: `Space` start/pause · `R` reset · `S` skip · `1` `2` `3` modes · `T` theme · `F` fullscreen
+- Keyboard: `Space` start/pause · `R` reset · `S` skip · `1`–`4` modes · `T` theme · `F` fullscreen
 
 ## Spotify setup (one time)
 

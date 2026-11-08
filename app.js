@@ -2,10 +2,10 @@
   'use strict';
 
   /* ---------- Config ---------- */
-  const MODES = [
-    { id: 'classic', name: 'Classic', focus: 25, break: 5 },
-    { id: 'deep', name: 'Deep Work', focus: 50, break: 10 },
-    { id: 'flow', name: 'Flow State', focus: 90, break: 20 },
+  const PRESETS = [
+    { id: 'classic', name: 'Classic', focus: 25, break: 5, long: 15 },
+    { id: 'deep', name: 'Deep Work', focus: 50, break: 10, long: 30 },
+    { id: 'flow', name: 'Flow State', focus: 90, break: 20, long: 40 },
   ];
   const THEMES = ['midnight', 'pomodoro'];
   const THEME_COLOR = { midnight: '#08142b', pomodoro: '#a8261e' };
@@ -25,6 +25,10 @@
     clientId: '',
     music: true,
     pauseMusic: true,
+    fade: true,
+    longBreak: true,
+    longEvery: 4,
+    custom: { focus: 30, break: 5, long: 15 },
     deviceId: '',
     playlists: { focus: null, break: null },
     order: { focus: 'shuffle', break: 'continuous' },
@@ -41,9 +45,10 @@
   const settings = { ...DEFAULTS, ...store.get('pomo.settings', {}) };
   settings.playlists = { ...DEFAULTS.playlists, ...settings.playlists };
   settings.order = { ...DEFAULTS.order, ...settings.order };
+  settings.custom = { ...DEFAULTS.custom, ...settings.custom };
   const saveSettings = () => store.set('pomo.settings', settings);
 
-  let timer = { phase: 'focus', running: false, endAt: 0, remaining: null, ...store.get('pomo.timer', {}) };
+  let timer = { phase: 'focus', running: false, endAt: 0, remaining: null, long: false, count: 0, ...store.get('pomo.timer', {}) };
   const saveTimer = () => store.set('pomo.timer', timer);
 
   const positions = store.get('pomo.positions', {}); // playlistId -> { trackUri, progressMs }
@@ -62,8 +67,10 @@
   };
 
   /* ---------- Timer ---------- */
-  const mode = () => MODES.find(m => m.id === settings.mode) || MODES[0];
-  const duration = (phase = timer.phase) => (mode()[phase] * 60000) / SPEED;
+  const modes = () => [...PRESETS, { id: 'custom', name: 'Custom', ...settings.custom }];
+  const mode = () => modes().find(m => m.id === settings.mode) || PRESETS[0];
+  const phaseKey = () => timer.phase === 'focus' ? 'focus' : (timer.long ? 'long' : 'break');
+  const duration = () => (mode()[phaseKey()] * 60000) / SPEED;
   const remainingMs = () => timer.running ? Math.max(0, timer.endAt - Date.now()) : (timer.remaining ?? duration());
 
   function format(ms) {
@@ -104,22 +111,32 @@
     if (wasRunning && settings.pauseMusic) music.pause();
   }
 
-  /** Moves to the next phase. `completed` = the phase ran out (vs. skipped). */
+  /** The state after the current phase. `completed` = the phase ran out (vs. skipped). */
+  function nextTimer(completed) {
+    let count = timer.count || 0;
+    if (timer.phase === 'focus') {
+      if (completed) {
+        rollStats();
+        stats.sessions += 1;
+        stats.minutes += mode().focus;
+        store.set('pomo.stats', stats);
+        count += 1;
+      }
+      const long = settings.longBreak && count >= settings.longEvery;
+      return { phase: 'break', running: false, endAt: 0, remaining: null, long, count };
+    }
+    if (timer.long) count = 0;
+    return { phase: 'focus', running: false, endAt: 0, remaining: null, long: false, count };
+  }
+
   function advance(completed) {
     const wasRunning = timer.running;
     const prev = timer.phase;
-    const next = prev === 'focus' ? 'break' : 'focus';
-    if (completed && prev === 'focus') {
-      rollStats();
-      stats.sessions += 1;
-      stats.minutes += mode().focus;
-      store.set('pomo.stats', stats);
-    }
     music.leave(prev);
-    timer = { phase: next, running: false, endAt: 0, remaining: null };
+    timer = nextTimer(completed);
     saveTimer();
 
-    const auto = completed ? (next === 'break' ? settings.autoBreak : settings.autoFocus) : wasRunning;
+    const auto = completed ? (timer.phase === 'break' ? settings.autoBreak : settings.autoFocus) : wasRunning;
     if (auto) start();
     else { render(); updateWakeLock(); music.pause(); }
   }
@@ -127,8 +144,10 @@
   function complete() {
     const finished = timer.phase;
     chime(finished);
-    notify(finished === 'focus' ? 'Focus session done — time for a break.' : 'Break is over — back to focus.');
     advance(true);
+    notify(finished === 'focus'
+      ? (timer.long ? 'Great work — time for a long break.' : 'Focus session done — time for a break.')
+      : 'Break is over — back to focus.');
   }
 
   function setMode(id) {
@@ -138,7 +157,7 @@
     settings.mode = id;
     saveSettings();
     music.leave(timer.phase);
-    timer = { phase: 'focus', running: false, endAt: 0, remaining: null };
+    timer = { phase: 'focus', running: false, endAt: 0, remaining: null, long: false, count: 0 };
     saveTimer();
     renderModes();
     render();
@@ -158,18 +177,33 @@
   function render() {
     const ms = remainingMs();
     const text = format(ms);
-    const phaseName = timer.phase === 'focus' ? 'Focus' : 'Break';
-    const key = `${text}|${timer.phase}|${timer.running}`;
+    const phaseName = timer.phase === 'focus' ? 'Focus' : (timer.long ? 'Long break' : 'Break');
+    const key = `${text}|${phaseName}|${timer.running}|${timer.count}|${settings.longBreak}|${settings.longEvery}|${settings.mode}`;
     if (key === lastRender) return;
     lastRender = key;
 
     el.timer.textContent = text;
     el.phase.textContent = phaseName;
+    renderDots();
     document.body.dataset.phase = timer.phase;
     el.fill.style.width = `${(1 - ms / duration()) * 100}%`;
     el.start.textContent = timer.running ? 'Pause' : (timer.remaining != null ? 'Resume' : 'Start');
     document.title = timer.running || timer.remaining != null ? `${text} · ${phaseName}` : 'Pomodoro';
     renderStats();
+  }
+
+  /* One dot per session until the long break. */
+  function renderDots() {
+    const dots = $('dots');
+    if (!settings.longBreak) { dots.innerHTML = ''; return; }
+    const done = Math.min(timer.count || 0, settings.longEvery);
+    let html = '';
+    for (let i = 0; i < settings.longEvery; i++) {
+      const cls = i < done ? 'done' : (i === done && timer.phase === 'focus' ? 'current' : '');
+      html += `<i class="${cls}"></i>`;
+    }
+    dots.innerHTML = html;
+    dots.title = `${done} of ${settings.longEvery} sessions until the long break`;
   }
 
   function rollStats() {
@@ -184,11 +218,11 @@
 
   function renderModes() {
     el.modes.innerHTML = '';
-    for (const m of MODES) {
+    for (const m of modes()) {
       const b = document.createElement('button');
       b.className = 'mode' + (m.id === settings.mode ? ' active' : '');
       b.innerHTML = `${m.name}<small>${m.focus}/${m.break}</small>`;
-      b.title = `${m.focus} min focus · ${m.break} min break`;
+      b.title = `${m.focus} min focus · ${m.break} min break · ${m.long} min long break`;
       b.onclick = () => setMode(m.id);
       el.modes.appendChild(b);
     }
@@ -287,6 +321,50 @@
     let loadedPhase = null; // whose playlist is currently loaded on the device
     let ours = false;       // true while music we started is (probably) playing
     let pollTimer = null;
+    let restoreVolume = null; // volume to return to after a fade-out
+    let fadeDevice = null;
+
+    const FADE_STEPS = 6;
+    const FADE_STEP_MS = 350;
+
+    /** Lowers the volume gradually. Only on devices that allow volume control (not iPhones). */
+    async function fadeOut() {
+      if (!settings.fade || !ours || restoreVolume != null) return;
+      try {
+        const st = await Spotify.state();
+        const d = st?.device;
+        if (!st?.is_playing || !d?.supports_volume || !(d.volume_percent > 5)) return;
+        restoreVolume = d.volume_percent;
+        fadeDevice = d.id;
+        for (let i = 1; i <= FADE_STEPS; i++) {
+          await Spotify.volume(restoreVolume * (1 - i / FADE_STEPS), fadeDevice);
+          await sleep(FADE_STEP_MS);
+        }
+      } catch {
+        await restore();
+      }
+    }
+
+    async function fadeIn() {
+      if (restoreVolume == null) return;
+      const target = restoreVolume;
+      try {
+        for (let i = 1; i <= FADE_STEPS; i++) {
+          await sleep(FADE_STEP_MS);
+          await Spotify.volume(target * (i / FADE_STEPS), fadeDevice);
+        }
+        restoreVolume = null;
+      } catch {
+        await restore();
+      }
+    }
+
+    async function restore() {
+      if (restoreVolume == null) return;
+      const target = restoreVolume;
+      restoreVolume = null;
+      await Spotify.volume(target, fadeDevice).catch(() => {});
+    }
 
     const active = () => settings.music && Spotify.isConnected();
 
@@ -376,21 +454,34 @@
       poll,
       onStart(phase) {
         enqueue(async () => {
-          if (loadedPhase === phase) { await Spotify.resume(settings.deviceId); ours = true; }
-          else await playPhase(phase);
+          try {
+            if (loadedPhase === phase) { await Spotify.resume(settings.deviceId); ours = true; }
+            else await playPhase(phase);
+          } finally {
+            if (ours) await fadeIn();
+            else await restore();
+          }
         });
       },
       leave(phase) {
         enqueue(async () => {
-          if (loadedPhase === phase) await savePosition(phase);
+          if (loadedPhase === phase) {
+            await fadeOut();
+            await savePosition(phase);
+          }
           loadedPhase = null;
         });
       },
       pause() {
         enqueue(async () => {
-          if (!ours) return;
+          if (!ours) return restore();
+          await fadeOut();
           ours = false;
-          await Spotify.pause(settings.deviceId).catch(err => { if (err.status !== 403) throw err; });
+          try {
+            await Spotify.pause(settings.deviceId).catch(err => { if (err.status !== 403) throw err; });
+          } finally {
+            await restore();
+          }
         });
       },
       test(phase) {
@@ -431,6 +522,27 @@
   bindToggle('optAutoHide', 'autoHide');
   bindToggle('optMusic', 'music');
   bindToggle('optPauseMusic', 'pauseMusic');
+  bindToggle('optFade', 'fade');
+  bindToggle('optLongBreak', 'longBreak', () => { lastRender = ''; render(); });
+
+  const longEvery = $('longEvery');
+  for (let n = 2; n <= 8; n++) longEvery.append(new Option(`${n} sessions`, n));
+  longEvery.value = settings.longEvery;
+  longEvery.onchange = () => { settings.longEvery = Number(longEvery.value); saveSettings(); render(); };
+
+  for (const key of ['focus', 'break', 'long']) {
+    const input = $(`custom-${key}`);
+    input.value = settings.custom[key];
+    input.addEventListener('change', () => {
+      const v = Math.round(Number(input.value));
+      if (!(v >= 1 && v <= 240)) { input.value = settings.custom[key]; return toast('Use 1–240 minutes.'); }
+      input.value = v;
+      settings.custom[key] = v;
+      saveSettings();
+      renderModes();
+      render();
+    });
+  }
 
   document.querySelectorAll('#themeSeg button').forEach(b => b.addEventListener('click', () => {
     settings.theme = b.dataset.value; saveSettings(); applyTheme();
@@ -665,7 +777,7 @@
       case 's': advance(false); break;
       case 't': cycleTheme(); break;
       case 'f': toggleFullscreen(); break;
-      case '1': case '2': case '3': setMode(MODES[Number(e.key) - 1].id); break;
+      case '1': case '2': case '3': case '4': setMode(modes()[Number(e.key) - 1].id); break;
     }
   });
 
@@ -678,7 +790,7 @@
 
   // A timer that ran out while the page was closed: just move on to the next phase (without auto-start chains).
   if (timer.running && remainingMs() <= 0) {
-    timer = { phase: timer.phase === 'focus' ? 'break' : 'focus', running: false, endAt: 0, remaining: null };
+    timer = nextTimer(true);
     saveTimer();
     render();
   }

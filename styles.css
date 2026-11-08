@@ -252,3 +252,20 @@ kbd { display: inline-block; min-width: 24px; text-align: center; padding: 2px 6
 .picker-list button:hover, .picker-list button:focus-visible { background: var(--faint); outline: none; }
 .picker-list button.selected .item-text strong { color: var(--accent); }
 .picker-empty { color: var(--muted); font-size: 13px; padding: 16px 8px; }
+
+/* Session dots + custom mode inputs */
+.dots { display: flex; gap: 8px; height: 8px; margin: 6px 0 2px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); box-shadow: inset 0 0 0 1px var(--border); transition: background .4s; }
+.dots i.done { background: var(--accent); box-shadow: none; }
+.dots i.current { box-shadow: inset 0 0 0 1.5px var(--accent); }
+select.mini { width: auto; padding: 6px 10px; }
+.nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.nums label { display: flex; flex-direction: column; gap: 4px; }
+.nums small { color: var(--muted); font-size: 12px; text-align: center; }
+.nums input {
+  width: 100%; text-align: center; background: var(--faint); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 6px; font-size: 15px; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield;
+}
+.nums input:focus { border-color: var(--accent); }
+.nums input::-webkit-inner-spin-button { opacity: .4; }
+#spConnected > small.hint { display: block; margin: -2px 0 6px; }

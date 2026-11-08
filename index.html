@@ -30,6 +30,7 @@
 
   <main class="stage">
     <div class="phase-label" id="phaseLabel">Focus</div>
+    <div class="dots" id="dots" aria-hidden="true"></div>
     <div class="timer" id="timer" aria-live="off">25:00</div>
     <div class="progress" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
     <input class="intent" id="intent" type="text" maxlength="80" placeholder="What are you working on?" aria-label="Current task">
@@ -74,6 +75,16 @@
       <label class="row"><span>Desktop notifications</span><input type="checkbox" id="optNotify"></label>
       <label class="row"><span>Keep screen awake</span><input type="checkbox" id="optWake"></label>
       <label class="row"><span>Hide controls while running</span><input type="checkbox" id="optAutoHide"></label>
+      <label class="row"><span>Long break</span><input type="checkbox" id="optLongBreak"></label>
+      <label class="row"><span>Long break after</span><select id="longEvery" class="mini"></select></label>
+      <div class="field">
+        <span>Custom mode (minutes)</span>
+        <div class="nums">
+          <label><input type="number" id="custom-focus" min="1" max="240" inputmode="numeric"><small>Focus</small></label>
+          <label><input type="number" id="custom-break" min="1" max="240" inputmode="numeric"><small>Break</small></label>
+          <label><input type="number" id="custom-long" min="1" max="240" inputmode="numeric"><small>Long break</small></label>
+        </div>
+      </div>
     </section>
 
     <section>
@@ -103,6 +114,8 @@
         <div class="row"><span>Connected as <strong id="spUser">…</strong></span><button class="link" id="disconnectBtn">Disconnect</button></div>
         <label class="row"><span>Control Spotify with the timer</span><input type="checkbox" id="optMusic"></label>
         <label class="row"><span>Pause music when timer pauses</span><input type="checkbox" id="optPauseMusic"></label>
+        <label class="row"><span>Fade music between phases</span><input type="checkbox" id="optFade"></label>
+        <small class="hint">Fading needs a device that allows volume control — iPhones don't, Android and computers do.</small>
 
         <label class="field">
           <span>Playback device</span>
@@ -147,7 +160,7 @@
         <li><kbd>Space</kbd> Start / pause</li>
         <li><kbd>R</kbd> Reset</li>
         <li><kbd>S</kbd> Skip phase</li>
-        <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Switch mode</li>
+        <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> Switch mode</li>
         <li><kbd>T</kbd> Switch theme</li>
         <li><kbd>F</kbd> Fullscreen</li>
       </ul>

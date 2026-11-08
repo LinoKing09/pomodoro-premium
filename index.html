@@ -116,8 +116,8 @@
         </label>
 
         <div class="field">
-          <span>Focus playlist</span>
-          <select id="focusPlaylist" data-phase="focus"></select>
+          <span>Focus music</span>
+          <button class="choice" data-pick="focus" id="focusChoice"></button>
           <div class="seg small" data-order="focus">
             <button data-value="shuffle">Shuffle</button>
             <button data-value="continuous">Continue where I left off</button>
@@ -125,8 +125,8 @@
         </div>
 
         <div class="field">
-          <span>Break playlist</span>
-          <select id="breakPlaylist" data-phase="break"></select>
+          <span>Break music</span>
+          <button class="choice" data-pick="break" id="breakChoice"></button>
           <div class="seg small" data-order="break">
             <button data-value="shuffle">Shuffle</button>
             <button data-value="continuous">Continue where I left off</button>
@@ -153,6 +153,25 @@
       </ul>
     </section>
   </aside>
+
+  <div class="picker" id="picker" hidden>
+    <div class="picker-card" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+      <div class="drawer-head">
+        <h2 id="pickerTitle">Choose music</h2>
+        <button class="icon-btn" id="pickerClose" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <input type="text" id="pickerInput" placeholder="Search Spotify or paste a playlist link" spellcheck="false" autocomplete="off">
+      <div class="picker-actions">
+        <button class="btn" id="pickerCurrent">Use what's playing now</button>
+        <a class="btn" href="https://open.spotify.com/" target="_blank" rel="noopener">Open Spotify ↗</a>
+      </div>
+      <p class="hint">Any playlist or album works, not just your own. Start it in Spotify and tap <em>Use what's playing now</em>, or copy its share link and paste it above.</p>
+      <div class="picker-label" id="pickerLabel">Your playlists</div>
+      <ul class="picker-list" id="pickerList"></ul>
+    </div>
+  </div>
 
   <div class="toast" id="toast" role="status"></div>
 

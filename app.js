@@ -470,6 +470,7 @@
   };
 
   let loadedLists = false;
+  let myPlaylists = [];
   async function refreshSpotifyUI() {
     const connected = Spotify.isConnected();
     $('spSetup').hidden = !!settings.clientId;
@@ -477,35 +478,139 @@
     $('spConnected').hidden = !settings.clientId || !connected;
     if (!settings.clientId || !connected) return;
     renderOrderSegs();
+    renderChoices();
     if (loadedLists) return;
     loadedLists = true;
     try {
       const [me, lists] = await Promise.all([Spotify.me(), Spotify.playlists(), loadDevices()]);
       $('spUser').textContent = me?.display_name || me?.id || 'Spotify user';
-      fillPlaylists(lists);
+      myPlaylists = lists;
     } catch (err) {
       loadedLists = false;
       toast(err.message || 'Could not load your Spotify data.');
     }
   }
 
-  function fillPlaylists(lists) {
+  const NOTE_ICON = '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>';
+  const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const cover = url => url ? `<img class="cover" src="${esc(url)}" alt="" loading="lazy">` : `<span class="cover">${NOTE_ICON}</span>`;
+  function describe(p) {
+    const kind = p.type === 'album' ? 'Album' : 'Playlist';
+    return [kind, p.owner, p.total ? `${p.total} tracks` : ''].filter(Boolean).join(' · ');
+  }
+
+  function renderChoices() {
     for (const phase of ['focus', 'break']) {
-      const select = $(`${phase}Playlist`);
-      const current = settings.playlists[phase];
-      select.innerHTML = '';
-      select.append(new Option('No music', ''));
-      for (const p of lists) select.append(new Option(`${p.name} (${p.total})`, p.id));
-      // Keep a saved playlist selectable even if it is not in the list (e.g. followed later).
-      if (current && !lists.some(p => p.id === current.id)) select.append(new Option(current.name, current.id));
-      select.value = current?.id || '';
-      select.onchange = () => {
-        const p = lists.find(x => x.id === select.value) || (current?.id === select.value ? current : null);
-        settings.playlists[phase] = p ? { id: p.id, uri: p.uri, name: p.name, total: p.total } : null;
-        saveSettings();
-      };
+      const p = settings.playlists[phase];
+      $(`${phase}Choice`).innerHTML = p
+        ? `${cover(p.image)}<span class="choice-text"><strong>${esc(p.name)}</strong><small>${esc(describe(p))}</small></span><span class="choice-change">Change</span>`
+        : `${cover('')}<span class="choice-text"><strong>No music</strong><small>Tap to choose a playlist</small></span><span class="choice-change">Choose</span>`;
     }
   }
+
+  /* Picker: own playlists, Spotify search, pasted links, or whatever is playing right now. */
+  const picker = (() => {
+    let phase = 'focus';
+    let searchTimer = null;
+    let searchId = 0;
+    const input = $('pickerInput');
+    const list = $('pickerList');
+    const label = $('pickerLabel');
+
+    function open(which) {
+      phase = which;
+      $('pickerTitle').textContent = which === 'focus' ? 'Focus music' : 'Break music';
+      input.value = '';
+      $('picker').hidden = false;
+      showMine();
+      setTimeout(() => input.focus(), 30);
+    }
+    function close() { $('picker').hidden = true; }
+    const isOpen = () => !$('picker').hidden;
+
+    function show(title, items, emptyText) {
+      label.textContent = title;
+      list.innerHTML = '';
+      const current = settings.playlists[phase];
+      if (!items.length) {
+        list.innerHTML = `<li class="picker-empty">${esc(emptyText)}</li>`;
+        return;
+      }
+      for (const p of items) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        if (p && current && p.id === current.id) b.className = 'selected';
+        b.innerHTML = p
+          ? `${cover(p.image)}<span class="item-text"><strong>${esc(p.name)}</strong><small>${esc(describe(p))}</small></span>`
+          : `${cover('')}<span class="item-text"><strong>No music</strong><small>Silence during this phase</small></span>`;
+        b.onclick = () => choose(p);
+        li.appendChild(b);
+        list.appendChild(li);
+      }
+    }
+
+    function showMine() {
+      show('Your playlists', [null, ...myPlaylists], loadedLists ? 'No playlists yet.' : 'Loading…');
+    }
+
+    function choose(p) {
+      settings.playlists[phase] = p ? { ...p } : null;
+      saveSettings();
+      renderChoices();
+      close();
+      if (p) toast(`${phase === 'focus' ? 'Focus' : 'Break'} music: ${p.name}`);
+    }
+
+    async function onInput() {
+      clearTimeout(searchTimer);
+      const q = input.value.trim();
+      const id = ++searchId;
+      if (!q) return showMine();
+      const link = Spotify.parseLink(q);
+      if (link) {
+        show('Link', [], 'Looking up…');
+        const item = await Spotify.lookup(link.type, link.id);
+        if (id === searchId) show('Link', [item], '');
+        return;
+      }
+      if (/spotify\.(com|link)|spotify:/.test(q)) {
+        return show('Link', [], 'Use a playlist or album link (Share → Copy link to playlist).');
+      }
+      const mine = myPlaylists.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+      show('Results', mine, 'Searching…');
+      searchTimer = setTimeout(async () => {
+        try {
+          const found = await Spotify.search(q);
+          if (id !== searchId) return;
+          const seen = new Set(mine.map(p => p.id));
+          show('Results', [...mine, ...found.filter(p => !seen.has(p.id))], 'Nothing found.');
+        } catch (err) {
+          if (id === searchId) show('Results', mine, err.message || 'Search failed.');
+        }
+      }, 350);
+    }
+
+    async function useCurrent() {
+      try {
+        const st = await Spotify.state();
+        const ctx = st?.context;
+        const link = ctx && Spotify.parseLink(ctx.uri);
+        if (!link) {
+          return toast(st?.item ? 'The current track is not playing from a playlist or album.' : 'Nothing is playing on Spotify right now.');
+        }
+        choose(await Spotify.lookup(link.type, link.id));
+      } catch (err) {
+        toast(err.message || 'Could not read what is playing.');
+      }
+    }
+
+    input.addEventListener('input', onInput);
+    $('pickerClose').onclick = close;
+    $('picker').addEventListener('click', e => { if (e.target.id === 'picker') close(); });
+    $('pickerCurrent').onclick = useCurrent;
+    document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => open(b.dataset.pick)));
+    return { open, close, isOpen };
+  })();
 
   async function loadDevices(announce) {
     const select = $('deviceSelect');
@@ -550,6 +655,7 @@
   }
 
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && picker.isOpen()) return picker.close();
     if (e.key === 'Escape' && document.body.classList.contains('drawer-open')) return openDrawer(false);
     const t = e.target;
     if (t.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;

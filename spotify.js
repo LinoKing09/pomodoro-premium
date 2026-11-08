@@ -159,17 +159,55 @@ const Spotify = (() => {
     while (next && all.length < 500) {
       const page = await api('GET', next);
       for (const p of page?.items || []) {
-        if (!p) continue;
-        all.push({
-          id: p.id,
-          uri: p.uri,
-          name: p.name,
-          total: p.items?.total ?? p.tracks?.total ?? 0,
-        });
+        const item = normalize(p);
+        if (item) all.push(item);
       }
       next = page?.next;
     }
     return all;
+  }
+
+  /** Turns a playlist or album object from the API into the small shape the app stores. */
+  function normalize(p) {
+    if (!p || !p.uri) return null;
+    const images = p.images || [];
+    return {
+      id: p.id,
+      uri: p.uri,
+      type: p.type || p.uri.split(':')[1],
+      name: p.name,
+      total: p.items?.total ?? p.tracks?.total ?? p.total_tracks ?? 0,
+      owner: p.owner?.display_name || (p.artists || []).map(a => a.name).join(', ') || '',
+      image: (images[images.length - 1] || images[0])?.url || '',
+    };
+  }
+
+  async function search(q) {
+    const res = await api('GET', '/search', { query: { q, type: 'playlist,album', limit: 10 } });
+    return [...(res?.playlists?.items || []), ...(res?.albums?.items || [])].map(normalize).filter(Boolean);
+  }
+
+  /** Finds "playlist"/"album" + ID in a share link (open.spotify.com/...) or URI (spotify:playlist:...). */
+  function parseLink(text) {
+    const m = String(text).match(/(playlist|album)[/:]([A-Za-z0-9]{22})/);
+    return m ? { type: m[1], id: m[2] } : null;
+  }
+
+  /** Metadata for any playlist/album. Falls back to Spotify's public oEmbed when the API won't say. */
+  async function lookup(type, id) {
+    try {
+      const item = normalize(await api('GET', `/${type}s/${id}`));
+      if (item) return item;
+    } catch {}
+    const base = { id, uri: `spotify:${type}:${id}`, type, name: type === 'album' ? 'Album' : 'Playlist', total: 0, owner: '', image: '' };
+    try {
+      const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(`https://open.spotify.com/${type}/${id}`)}`);
+      if (res.ok) {
+        const data = await res.json();
+        return { ...base, name: data.title || base.name, image: data.thumbnail_url || '' };
+      }
+    } catch {}
+    return base;
   }
 
   const dev = deviceId => ({ device_id: deviceId || undefined });
@@ -183,12 +221,16 @@ const Spotify = (() => {
     logout() { token = null; write(TOKEN_KEY, null); },
     me: () => api('GET', '/me'),
     playlists,
+    search,
+    parseLink,
+    lookup,
     devices: async () => (await api('GET', '/me/player/devices'))?.devices || [],
     state: () => api('GET', '/me/player'),
     play: (deviceId, body) => api('PUT', '/me/player/play', { query: dev(deviceId), body }),
     resume: deviceId => api('PUT', '/me/player/play', { query: dev(deviceId) }),
     pause: deviceId => api('PUT', '/me/player/pause', { query: dev(deviceId) }),
     shuffle: (on, deviceId) => api('PUT', '/me/player/shuffle', { query: { state: on, ...dev(deviceId) } }),
+    volume: (pct, deviceId) => api('PUT', '/me/player/volume', { query: { volume_percent: Math.round(pct), ...dev(deviceId) } }),
     repeat: (mode, deviceId) => api('PUT', '/me/player/repeat', { query: { state: mode, ...dev(deviceId) } }),
   };
 })();

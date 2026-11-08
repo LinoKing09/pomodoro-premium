@@ -52,6 +52,7 @@ body {
   background-color: var(--bg1);
   display: grid;
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   transition: background .8s var(--ease), color .4s;
   -webkit-font-smoothing: antialiased;
@@ -211,7 +212,8 @@ kbd { display: inline-block; min-width: 24px; text-align: center; padding: 2px 6
 
 @media (max-width: 640px) {
   .top { padding: 14px 16px; flex-wrap: wrap; justify-content: center; }
-  .mode { padding: 7px 11px; font-size: 13px; }
+  .modes { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .mode { padding: 7px 10px; font-size: 12.5px; }
   .mode small { display: none; }
   .bottom { padding: 14px 16px; flex-direction: column; }
   .now-playing { max-width: 100%; }
